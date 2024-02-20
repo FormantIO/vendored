@@ -425,7 +425,11 @@ func lookupConfigs(s config.Config, objAPI ObjectLayer) {
 
 	dnsURL, dnsUser, dnsPass, err := env.LookupEnv(config.EnvDNSWebhook)
 	if err != nil {
-		logger.LogIf(ctx, fmt.Errorf("Unable to initialize remote webhook DNS config %w", err))
+		if globalIsGateway {
+			logger.FatalIf(err, "Unable to initialize remote webhook DNS config")
+		} else {
+			logger.LogIf(ctx, fmt.Errorf("Unable to initialize remote webhook DNS config %w", err))
+		}
 	}
 	if err == nil && dnsURL != "" {
 		bootstrapTraceMsg("initialize remote bucket DNS store")
@@ -503,29 +507,34 @@ func lookupConfigs(s config.Config, objAPI ObjectLayer) {
 	bootstrapTraceMsg("applying the dynamic configuration")
 	// Apply dynamic config values
 	if err := applyDynamicConfig(ctx, objAPI, s); err != nil {
-		logger.LogIf(ctx, err)
+		if globalIsGateway {
+			logger.LogIf(ctx, err)
+			logger.FatalIf(err, "Unable to initialize dynamic configuration")
+		} else {
+			logger.LogIf(ctx, err)
+		}
 	}
 }
 
 func applyDynamicConfigForSubSys(ctx context.Context, objAPI ObjectLayer, s config.Config, subSys string) error {
-	if objAPI == nil {
-		return errServerNotInitialized
-	}
+	// if objAPI == nil {
+	// 	return errServerNotInitialized
+	// }
 
-	setDriveCounts := objAPI.SetDriveCounts()
+	// setDriveCounts := objAPI.SetDriveCounts()
 	switch subSys {
-	case config.APISubSys:
-		apiConfig, err := api.LookupConfig(s[config.APISubSys][config.Default])
-		if err != nil {
-			logger.LogIf(ctx, fmt.Errorf("Invalid api configuration: %w", err))
-		}
+	// case config.APISubSys:
+	// 	apiConfig, err := api.LookupConfig(s[config.APISubSys][config.Default])
+	// 	if err != nil {
+	// 		logger.LogIf(ctx, fmt.Errorf("Invalid api configuration: %w", err))
+	// 	}
 
-		globalAPIConfig.init(apiConfig, setDriveCounts)
+	// 	globalAPIConfig.init(apiConfig, setDriveCounts)
 
-		// Initialize remote instance transport once.
-		getRemoteInstanceTransportOnce.Do(func() {
-			getRemoteInstanceTransport = NewHTTPTransportWithTimeout(apiConfig.RemoteTransportDeadline)
-		})
+	// 	// Initialize remote instance transport once.
+	// 	getRemoteInstanceTransportOnce.Do(func() {
+	// 		getRemoteInstanceTransport = NewHTTPTransportWithTimeout(apiConfig.RemoteTransportDeadline)
+	// 	})
 	case config.CompressionSubSys:
 		cmpCfg, err := compress.LookupConfig(s[config.CompressionSubSys][config.Default])
 		if err != nil {
@@ -600,19 +609,19 @@ func applyDynamicConfigForSubSys(ctx context.Context, objAPI ObjectLayer, s conf
 		if errs := logger.UpdateAuditKafkaTargets(ctx, loggerCfg); len(errs) > 0 {
 			logger.LogIf(ctx, fmt.Errorf("Unable to update audit kafka targets: %v", errs))
 		}
-	case config.StorageClassSubSys:
-		for i, setDriveCount := range setDriveCounts {
-			sc, err := storageclass.LookupConfig(s[config.StorageClassSubSys][config.Default], setDriveCount)
-			if err != nil {
-				logger.LogIf(ctx, fmt.Errorf("Unable to initialize storage class config: %w", err))
-				break
-			}
-			// if we validated all setDriveCounts and it was successful
-			// proceed to store the correct storage class globally.
-			if i == len(setDriveCounts)-1 {
-				globalStorageClass.Update(sc)
-			}
-		}
+	// case config.StorageClassSubSys:
+	// 	for i, setDriveCount := range setDriveCounts {
+	// 		sc, err := storageclass.LookupConfig(s[config.StorageClassSubSys][config.Default], setDriveCount)
+	// 		if err != nil {
+	// 			logger.LogIf(ctx, fmt.Errorf("Unable to initialize storage class config: %w", err))
+	// 			break
+	// 		}
+	// 		// if we validated all setDriveCounts and it was successful
+	// 		// proceed to store the correct storage class globally.
+	// 		if i == len(setDriveCounts)-1 {
+	// 			globalStorageClass.Update(sc)
+	// 		}
+	// 	}
 	case config.SubnetSubSys:
 		subnetConfig, err := subnet.LookupConfig(s[config.SubnetSubSys][config.Default], globalProxyTransport)
 		if err != nil {
@@ -621,17 +630,17 @@ func applyDynamicConfigForSubSys(ctx context.Context, objAPI ObjectLayer, s conf
 			globalSubnetConfig.Update(subnetConfig)
 			globalSubnetConfig.ApplyEnv() // update environment settings for Console UI
 		}
-	case config.CallhomeSubSys:
-		callhomeCfg, err := callhome.LookupConfig(s[config.CallhomeSubSys][config.Default])
-		if err != nil {
-			logger.LogIf(ctx, fmt.Errorf("Unable to load callhome config: %w", err))
-		} else {
-			enable := callhomeCfg.Enable && !globalCallhomeConfig.Enabled()
-			globalCallhomeConfig.Update(callhomeCfg)
-			if enable {
-				initCallhome(ctx, objAPI)
-			}
-		}
+		// case config.CallhomeSubSys:
+		// 	callhomeCfg, err := callhome.LookupConfig(s[config.CallhomeSubSys][config.Default])
+		// 	if err != nil {
+		// 		logger.LogIf(ctx, fmt.Errorf("Unable to load callhome config: %w", err))
+		// 	} else {
+		// 		enable := callhomeCfg.Enable && !globalCallhomeConfig.Enabled()
+		// 		globalCallhomeConfig.Update(callhomeCfg)
+		// 		if enable {
+		// 			initCallhome(ctx, objAPI)
+		// 		}
+		// 	}
 	}
 	globalServerConfigMu.Lock()
 	defer globalServerConfigMu.Unlock()

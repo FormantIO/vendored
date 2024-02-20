@@ -532,10 +532,19 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 			}
 		}
 
+		versioned := false
+		suspended := false
+
+		// if we are a gateway just set versioed ans suspended to false
+		if !globalIsGateway {
+			versioned = vc.PrefixEnabled(object.ObjectName)
+			suspended = vc.Suspended()
+		}
+
 		opts := ObjectOptions{
 			VersionID:        object.VersionID,
-			Versioned:        vc.PrefixEnabled(object.ObjectName),
-			VersionSuspended: vc.Suspended(),
+			Versioned:        versioned,
+			VersionSuspended: suspended,
 		}
 
 		if replicateDeletes || object.VersionID != "" && hasLockEnabled || !globalTierConfigMgr.Empty() {
@@ -604,10 +613,22 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 	// Disable timeouts and cancellation
 	ctx = bgContext(ctx)
 
+	prefixFn := func(string) bool {
+		return false
+	}
+
+	suspended := false
+
+	// if we are a gateway just set versioed ans suspended to false
+	if !globalIsGateway {
+		prefixFn = vc.PrefixEnabled
+		suspended = vc.Suspended()
+	}
+
 	deleteList := toNames(objectsToDelete)
 	dObjects, errs := deleteObjectsFn(ctx, bucket, deleteList, ObjectOptions{
-		PrefixEnabledFn:  vc.PrefixEnabled,
-		VersionSuspended: vc.Suspended(),
+		PrefixEnabledFn:  prefixFn,
+		VersionSuspended: suspended,
 	})
 
 	for i := range errs {

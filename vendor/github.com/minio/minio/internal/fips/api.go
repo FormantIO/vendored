@@ -145,3 +145,40 @@ func TLSCurveIDs() []tls.CurveID {
 	}
 	return curves
 }
+
+func cipherSuitesDARE() []byte {
+	return []byte{sio.AES_256_GCM}
+}
+
+func cipherSuitesTLS() []uint16 {
+	return []uint16{
+		tls.TLS_AES_128_GCM_SHA256,
+		tls.TLS_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	}
+}
+
+func ellipticCurvesTLS() []tls.CurveID {
+	return []tls.CurveID{tls.CurveP256}
+}
+
+// CipherSuitesDARE returns the supported cipher suites
+// for the DARE object encryption.
+func CipherSuitesDARE() []byte {
+	return cipherSuitesDARE()
+}
+
+// CipherSuitesTLS returns the supported cipher suites
+// used by the TLS stack.
+func CipherSuitesTLS() []uint16 {
+	return cipherSuitesTLS()
+}
+
+// EllipticCurvesTLS returns the supported elliptic
+// curves used by the TLS stack.
+func EllipticCurvesTLS() []tls.CurveID {
+	return ellipticCurvesTLS()
+}

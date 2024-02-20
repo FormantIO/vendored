@@ -37,6 +37,7 @@ import (
 	"runtime/trace"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/coreos/go-oidc"
@@ -899,6 +900,8 @@ func getMinioMode() string {
 		return globalMinioModeErasure
 	case globalIsErasureSD:
 		return globalMinioModeErasureSD
+	case globalIsGateway:
+		return globalMinioModeGatewayPrefix + globalGatewayName
 	default:
 		return globalMinioModeFS
 	}
@@ -1254,4 +1257,119 @@ func unwrapAll(err error) error {
 func stringsHasPrefixFold(s, prefix string) bool {
 	// Test match with case first.
 	return len(s) >= len(prefix) && (s[0:len(prefix)] == prefix || strings.EqualFold(s[0:len(prefix)], prefix))
+}
+
+func newCustomHTTPTransport(tlsConfig *tls.Config, dialTimeout time.Duration) func() *http.Transport {
+	// For more details about various values used here refer
+	// https://golang.org/pkg/net/http/#Transport documentation
+	tr := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           xhttp.DialContextWithDNSCache(globalDNSCache, xhttp.NewInternodeDialContext(dialTimeout, xhttp.TCPOptions{})),
+		MaxIdleConnsPerHost:   1024,
+		WriteBufferSize:       16 << 10, // 16KiB moving up from 4KiB default
+		ReadBufferSize:        16 << 10, // 16KiB moving up from 4KiB default
+		IdleConnTimeout:       15 * time.Second,
+		ResponseHeaderTimeout: 3 * time.Minute, // Set conservative timeouts for MinIO internode.
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 10 * time.Second,
+		TLSClientConfig:       tlsConfig,
+		// Go net/http automatically unzip if content-type is
+		// gzip disable this feature, as we are always interested
+		// in raw stream.
+		DisableCompression: true,
+	}
+
+	// https://github.com/golang/go/issues/23559
+	// https://github.com/golang/go/issues/42534
+	// https://github.com/golang/go/issues/43989
+	// https://github.com/golang/go/issues/33425
+	// https://github.com/golang/go/issues/29246
+	// if tlsConfig != nil {
+	// 	trhttp2, _ := http2.ConfigureTransports(tr)
+	// 	if trhttp2 != nil {
+	// 		// ReadIdleTimeout is the timeout after which a health check using ping
+	// 		// frame will be carried out if no frame is received on the
+	// 		// connection. 5 minutes is sufficient time for any idle connection.
+	// 		trhttp2.ReadIdleTimeout = 5 * time.Minute
+	// 		// PingTimeout is the timeout after which the connection will be closed
+	// 		// if a response to Ping is not received.
+	// 		trhttp2.PingTimeout = dialTimeout
+	// 		// DisableCompression, if true, prevents the Transport from
+	// 		// requesting compression with an "Accept-Encoding: gzip"
+	// 		trhttp2.DisableCompression = true
+	// 	}
+	// }
+
+	return func() *http.Transport {
+		return tr
+	}
+}
+
+// NewGatewayHTTPTransportWithClientCerts returns a new http configuration
+// used while communicating with the cloud backends.
+func NewGatewayHTTPTransportWithClientCerts(clientCert, clientKey string) *http.Transport {
+	transport := newGatewayHTTPTransport(1 * time.Minute)
+	if clientCert != "" && clientKey != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		c, err := certs.NewManager(ctx, clientCert, clientKey, tls.LoadX509KeyPair)
+		if err != nil {
+			logger.LogIf(ctx, fmt.Errorf("failed to load client key and cert, please check your endpoint configuration: %s",
+				err.Error()))
+		}
+		if c != nil {
+			c.UpdateReloadDuration(10 * time.Second)
+			c.ReloadOnSignal(syscall.SIGHUP) // allow reloads upon SIGHUP
+			transport.TLSClientConfig.GetClientCertificate = c.GetClientCertificate
+		}
+	}
+	return transport
+}
+
+// NewGatewayHTTPTransport returns a new http configuration
+// used while communicating with the cloud backends.
+func NewGatewayHTTPTransport() *http.Transport {
+	return newGatewayHTTPTransport(1 * time.Minute)
+}
+
+func newGatewayHTTPTransport(timeout time.Duration) *http.Transport {
+	tr := newCustomHTTPTransport(&tls.Config{
+		RootCAs:            globalRootCAs,
+		ClientSessionCache: tls.NewLRUClientSessionCache(tlsClientSessionCacheSize),
+	}, defaultDialTimeout)()
+
+	// Customize response header timeout for gateway transport.
+	tr.ResponseHeaderTimeout = timeout
+	return tr
+}
+
+// Load the json (typically from disk file).
+func jsonLoad(r io.ReadSeeker, data interface{}) error {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	return json.NewDecoder(r).Decode(data)
+}
+
+// Save to disk file in json format.
+func jsonSave(f interface {
+	io.WriteSeeker
+	Truncate(int64) error
+}, data interface{},
+) error {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err = f.Truncate(0); err != nil {
+		return err
+	}
+	if _, err = f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	if err != nil {
+		return err
+	}
+	return nil
 }

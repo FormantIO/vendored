@@ -224,4 +224,81 @@ Examples:
 		"",
 		"MINIO_API_TRANSITION_WORKERS: should be >= GOMAXPROCS/2",
 	)
+	ErrInvalidGWSSEValue = newErrFn(
+		"Invalid gateway SSE value",
+		"Please check the passed value",
+		"MINIO_GATEWAY_SSE: Gateway SSE accepts only C and S3 as valid values. Delimit by `;` to set more than one value",
+	)
+
+	ErrInvalidCacheDrivesValue = newErrFn(
+		"Invalid cache drive value",
+		"Please check the value in this ENV variable",
+		"MINIO_CACHE_DRIVES: Mounted drives or directories are delimited by `,`",
+	)
+
+	ErrInvalidCacheExcludesValue = newErrFn(
+		"Invalid cache excludes value",
+		"Please check the passed value",
+		"MINIO_CACHE_EXCLUDE: Cache exclusion patterns are delimited by `,`",
+	)
+
+	ErrInvalidCacheExpiryValue = newErrFn(
+		"Invalid cache expiry value",
+		"Please check the passed value",
+		"MINIO_CACHE_EXPIRY: Valid cache expiry duration must be in days",
+	)
+
+	ErrInvalidCacheQuota = newErrFn(
+		"Invalid cache quota value",
+		"Please check the passed value",
+		"MINIO_CACHE_QUOTA: Valid cache quota value must be between 0-100",
+	)
+
+	ErrInvalidCacheAfter = newErrFn(
+		"Invalid cache after value",
+		"Please check the passed value",
+		"MINIO_CACHE_AFTER: Valid cache after value must be 0 or greater",
+	)
+
+	ErrInvalidCacheWatermarkLow = newErrFn(
+		"Invalid cache low watermark value",
+		"Please check the passed value",
+		"MINIO_CACHE_WATERMARK_LOW: Valid cache low watermark value must be between 0-100",
+	)
+
+	ErrInvalidCacheWatermarkHigh = newErrFn(
+		"Invalid cache high watermark value",
+		"Please check the passed value",
+		"MINIO_CACHE_WATERMARK_HIGH: Valid cache high watermark value must be between 0-100",
+	)
+
+	ErrInvalidCacheEncryptionKey = newErrFn(
+		"Invalid cache encryption master key value",
+		"Please check the passed value",
+		"MINIO_CACHE_ENCRYPTION_SECRET_KEY: For more information, please refer to https://docs.min.io/docs/minio-disk-cache-guide",
+	)
+
+	ErrInvalidCacheRange = newErrFn(
+		"Invalid cache range value",
+		"Please check the passed value",
+		"MINIO_CACHE_RANGE: Valid expected value is `on` or `off`",
+	)
+
+	ErrInvalidCacheCommitValue = newErrFn(
+		"Invalid cache commit value",
+		"Please check the passed value",
+		"MINIO_CACHE_COMMIT: Valid expected value is `writeback` or `writethrough`",
+	)
+
+	ErrInvalidCacheSetting = newErrFn(
+		"Incompatible cache setting",
+		"Please check the passed value",
+		"MINIO_CACHE_AFTER cannot be used with MINIO_CACHE_COMMIT setting",
+	)
+
+	ErrInvalidGWSSEEnvValue = newErrFn(
+		"Invalid gateway SSE configuration",
+		"",
+		"Refer to https://docs.min.io/docs/minio-kms-quickstart-guide.html for setting up SSE",
+	)
 )

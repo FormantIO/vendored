@@ -32,6 +32,15 @@ import (
 	xioutil "github.com/minio/minio/internal/ioutil"
 )
 
+// LockType represents required locking for ObjectLayer operations
+type LockType int
+
+const (
+	noLock LockType = iota
+	readLock
+	writeLock
+)
+
 // CheckPreconditionFn returns true if precondition check failed.
 type CheckPreconditionFn func(o ObjectInfo) bool
 
@@ -145,8 +154,12 @@ type DeleteBucketOptions struct {
 
 // BucketOptions provides options for ListBuckets and GetBucketInfo call.
 type BucketOptions struct {
-	Deleted bool // true only when site replication is enabled
-	Cached  bool // true only when we are requesting a cached response instead of hitting the disk for example ListBuckets() call.
+	Deleted           bool // true only when site replication is enabled
+	Cached            bool // true only when we are requesting a cached response instead of hitting the disk for example ListBuckets() call.
+	Location          string
+	LockEnabled       bool
+	VersioningEnabled bool
+	ForceCreate       bool // Create buckets even if they are already created.
 }
 
 // SetReplicaStatus sets replica status and timestamp for delete operations in ObjectOptions
@@ -274,6 +287,9 @@ type ObjectLayer interface {
 	PutObjectTags(context.Context, string, string, string, ObjectOptions) (ObjectInfo, error)
 	GetObjectTags(context.Context, string, string, ObjectOptions) (*tags.Tags, error)
 	DeleteObjectTags(context.Context, string, string, ObjectOptions) (ObjectInfo, error)
+
+	IsCompressionSupported() bool
+	// IsNotificationSupported() bool
 }
 
 // GetObject - TODO(aead): This function just acts as an adapter for GetObject tests and benchmarks

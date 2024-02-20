@@ -38,6 +38,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/minio/minio/internal/auth"
+	"github.com/minio/minio/internal/config/cache"
 	"github.com/minio/minio/internal/config/callhome"
 	"github.com/minio/minio/internal/config/compress"
 	"github.com/minio/minio/internal/config/dns"
@@ -409,6 +410,21 @@ var (
 	// Indicates if server was started as `--address ":0"`
 	globalDynamicAPIPort bool
 	// Add new variable global values here.
+
+	// GlobalGatewaySSE sse options
+	GlobalGatewaySSE gatewaySSE
+	// Name of gateway server, e.g S3, GCS, Azure, etc
+	globalGatewayName = ""
+	// Indicates if the running minio is in gateway mode.
+	globalIsGateway = false
+
+	// Initialized KMS configuration for disk cache
+	globalCacheKMS kms.KMS
+	// Disk cache drives
+	globalCacheConfig cache.Config
+
+	globalMinioConsolePortAuto   = false
+	globalMinioModeGatewayPrefix = "mode-gateway-"
 )
 
 var globalAuthPluginMutex sync.Mutex

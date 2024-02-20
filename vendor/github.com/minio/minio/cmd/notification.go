@@ -1561,3 +1561,29 @@ func (sys *NotificationSys) GetReplicationMRF(ctx context.Context, bucket, node 
 	}(&wg)
 	return mrfCh, nil
 }
+
+// InitBucketTargets - initializes notification system from notification.xml of all buckets.
+func (sys *NotificationSys) InitBucketTargets(ctx context.Context, objAPI ObjectLayer) error {
+	if objAPI == nil {
+		return errServerNotInitialized
+	}
+
+	// In gateway mode, notifications are not supported - except NAS gateway.
+	if globalIsGateway {
+		return nil
+	}
+
+	// logger.LogIf(ctx, sys.targetList.Add(globalConfigTargetList.Targets()...))
+
+	// go func() {
+	// 	for res := range sys.targetResCh {
+	// 		if res.Err != nil {
+	// 			reqInfo := &logger.ReqInfo{}
+	// 			reqInfo.AppendTags("targetID", res.ID.Name)
+	// 			logger.LogOnceIf(logger.SetReqInfo(GlobalContext, reqInfo), res.Err, res.ID)
+	// 		}
+	// 	}
+	// }()
+
+	return nil
+}

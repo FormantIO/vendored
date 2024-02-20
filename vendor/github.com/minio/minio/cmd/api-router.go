@@ -67,6 +67,12 @@ func setObjectLayer(o ObjectLayer) {
 	globalObjLayerMutex.Unlock()
 }
 
+// func newCachedObjectLayerFn() CacheObjectLayer {
+// 	globalObjLayerMutex.RLock()
+// 	defer globalObjLayerMutex.RUnlock()
+// 	return globalCacheObjectAPI
+// }
+
 // objectAPIHandler implements and provides http handlers for S3 API.
 type objectAPIHandlers struct {
 	ObjectAPI func() ObjectLayer

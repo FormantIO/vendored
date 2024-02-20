@@ -31,7 +31,11 @@ type BucketVersioningSys struct{}
 func (sys *BucketVersioningSys) Enabled(bucket string) bool {
 	vc, err := sys.Get(bucket)
 	if err != nil {
-		logger.CriticalIf(GlobalContext, err)
+		if globalIsGateway {
+			return false
+		} else {
+			logger.CriticalIf(GlobalContext, err)
+		}
 	}
 	return vc.Enabled()
 }
@@ -42,7 +46,12 @@ func (sys *BucketVersioningSys) Enabled(bucket string) bool {
 func (sys *BucketVersioningSys) PrefixEnabled(bucket, prefix string) bool {
 	vc, err := sys.Get(bucket)
 	if err != nil {
-		logger.CriticalIf(GlobalContext, err)
+		if globalIsGateway {
+			return false
+		} else {
+			logger.CriticalIf(GlobalContext, err)
+		}
+
 	}
 	return vc.PrefixEnabled(prefix)
 }
@@ -51,7 +60,12 @@ func (sys *BucketVersioningSys) PrefixEnabled(bucket, prefix string) bool {
 func (sys *BucketVersioningSys) Suspended(bucket string) bool {
 	vc, err := sys.Get(bucket)
 	if err != nil {
-		logger.CriticalIf(GlobalContext, err)
+		if globalIsGateway {
+			return false
+		} else {
+			logger.CriticalIf(GlobalContext, err)
+		}
+
 	}
 	return vc.Suspended()
 }
@@ -61,7 +75,12 @@ func (sys *BucketVersioningSys) Suspended(bucket string) bool {
 func (sys *BucketVersioningSys) PrefixSuspended(bucket, prefix string) bool {
 	vc, err := sys.Get(bucket)
 	if err != nil {
-		logger.CriticalIf(GlobalContext, err)
+		if globalIsGateway {
+			return false
+		} else {
+			logger.CriticalIf(GlobalContext, err)
+		}
+
 	}
 
 	return vc.PrefixSuspended(prefix)
@@ -69,6 +88,15 @@ func (sys *BucketVersioningSys) PrefixSuspended(bucket, prefix string) bool {
 
 // Get returns stored bucket policy
 func (sys *BucketVersioningSys) Get(bucket string) (*versioning.Versioning, error) {
+
+	if globalIsGateway {
+		objAPI := newObjectLayerFn()
+		if objAPI == nil {
+			return nil, errServerNotInitialized
+		}
+		return nil, NotImplemented{}
+	}
+
 	if bucket == minioMetaBucket || strings.HasPrefix(bucket, minioMetaBucket) {
 		return &versioning.Versioning{XMLNS: "http://s3.amazonaws.com/doc/2006-03-01/"}, nil
 	}

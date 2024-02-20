@@ -1137,3 +1137,42 @@ func (o *ObjectInfo) decryptChecksums(part int) map[string]string {
 	}
 	return hash.ReadCheckSums(data, part)
 }
+
+func decryptObjectInfo(key []byte, bucket, object string, metadata map[string]string) ([]byte, error) {
+	switch kind, _ := crypto.IsEncrypted(metadata); kind {
+	case crypto.S3:
+		var KMS kms.KMS = GlobalKMS
+		if isCacheEncrypted(metadata) {
+			KMS = globalCacheKMS
+		}
+		if KMS == nil {
+			return nil, errKMSNotConfigured
+		}
+		objectKey, err := crypto.S3.UnsealObjectKey(KMS, metadata, bucket, object)
+		if err != nil {
+			return nil, err
+		}
+		return objectKey[:], nil
+	case crypto.S3KMS:
+		if GlobalKMS == nil {
+			return nil, errKMSNotConfigured
+		}
+		objectKey, err := crypto.S3KMS.UnsealObjectKey(GlobalKMS, metadata, bucket, object)
+		if err != nil {
+			return nil, err
+		}
+		return objectKey[:], nil
+	case crypto.SSEC:
+		sealedKey, err := crypto.SSEC.ParseMetadata(metadata)
+		if err != nil {
+			return nil, err
+		}
+		var objectKey crypto.ObjectKey
+		if err = objectKey.Unseal(key, sealedKey, crypto.SSEC.String(), bucket, object); err != nil {
+			return nil, err
+		}
+		return objectKey[:], nil
+	default:
+		return nil, errObjectTampered
+	}
+}

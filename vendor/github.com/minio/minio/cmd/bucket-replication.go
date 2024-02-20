@@ -83,6 +83,15 @@ func isReplicationEnabled(ctx context.Context, bucketName string) bool {
 
 // gets replication config associated to a given bucket name.
 func getReplicationConfig(ctx context.Context, bucketName string) (rc *replication.Config, err error) {
+	if globalIsGateway {
+		objAPI := newObjectLayerFn()
+		if objAPI == nil {
+			return rc, errServerNotInitialized
+		}
+
+		return rc, BucketReplicationConfigNotFound{Bucket: bucketName}
+	}
+
 	rCfg, _, err := globalBucketMetadataSys.GetReplicationConfig(ctx, bucketName)
 	if err != nil {
 		if errors.Is(err, BucketReplicationConfigNotFound{Bucket: bucketName}) || errors.Is(err, errInvalidArgument) {
@@ -3025,7 +3034,7 @@ func getReplicationDiff(ctx context.Context, objAPI ObjectLayer, bucket string, 
 // QueueReplicationHeal is a wrapper for queueReplicationHeal
 func QueueReplicationHeal(ctx context.Context, bucket string, oi ObjectInfo, retryCount int) {
 	// ignore modtime zero objects
-	if oi.ModTime.IsZero() {
+	if oi.ModTime.IsZero() || globalIsGateway {
 		return
 	}
 	rcfg, _ := getReplicationConfig(ctx, bucket)

@@ -2569,3 +2569,8 @@ func (z *erasureServerPools) DecomTieredObject(ctx context.Context, bucket, obje
 
 	return z.serverPools[idx].DecomTieredObject(ctx, bucket, object, fi, opts)
 }
+
+// IsCompressionSupported returns whether compression is applicable for this layer.
+func (z *erasureServerPools) IsCompressionSupported() bool {
+	return true
+}

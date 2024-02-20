@@ -118,6 +118,9 @@ type ObjectInfo struct {
 	// Hex encoded unique entity tag of the object.
 	ETag string
 
+	// The ETag stored in the gateway backend
+	InnerETag string
+
 	// Version ID of this object.
 	VersionID string
 
@@ -148,6 +151,11 @@ type ObjectInfo struct {
 
 	// Date and time at which the object is no longer able to be cached
 	Expires time.Time
+
+	// CacheStatus sets status of whether this is a cache hit/miss
+	CacheStatus CacheStatusType
+	// CacheLookupStatus sets whether a cacheable response is present in the cache
+	CacheLookupStatus CacheStatusType
 
 	// Specify object storage class
 	StorageClass string
@@ -230,6 +238,7 @@ func (o *ObjectInfo) Clone() (cinfo ObjectInfo) {
 		ModTime:                    o.ModTime,
 		Size:                       o.Size,
 		IsDir:                      o.IsDir,
+		InnerETag:                  o.InnerETag,
 		ETag:                       o.ETag,
 		VersionID:                  o.VersionID,
 		IsLatest:                   o.IsLatest,

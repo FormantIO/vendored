@@ -1035,3 +1035,19 @@ func (a bgCtx) Deadline() (deadline time.Time, ok bool) {
 func (a bgCtx) Value(key interface{}) interface{} {
 	return a.parent.Value(key)
 }
+
+func verifyObjectLayerFeatures(name string, objAPI ObjectLayer) {
+	if strings.HasPrefix(name, "gateway") {
+		if GlobalGatewaySSE.IsSet() && GlobalKMS == nil {
+			uiErr := config.ErrInvalidGWSSEEnvValue(nil).Msg("MINIO_GATEWAY_SSE set but KMS is not configured")
+			logger.Fatal(uiErr, "Unable to start gateway with SSE")
+		}
+	}
+
+	globalCompressConfigMu.Lock()
+	if globalCompressConfig.Enabled && !objAPI.IsCompressionSupported() {
+		logger.Fatal(errInvalidArgument,
+			"Compression support is requested but '%s' does not support compression", name)
+	}
+	globalCompressConfigMu.Unlock()
+}

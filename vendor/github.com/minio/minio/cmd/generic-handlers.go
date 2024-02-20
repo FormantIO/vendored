@@ -292,6 +292,8 @@ func hasBadHost(host string) error {
 		// under CI/CD test setups ignore empty hosts as invalid hosts
 		return nil
 	}
+	// replace leading . from host for validation from nginx gateway
+	host = strings.TrimPrefix(host, ".")
 	_, err := xnet.ParseHost(host)
 	return err
 }

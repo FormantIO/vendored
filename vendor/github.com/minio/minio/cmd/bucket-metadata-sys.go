@@ -403,6 +403,10 @@ func (sys *BucketMetadataSys) GetConfig(ctx context.Context, bucket string) (met
 		return newBucketMetadata(bucket), reloaded, errServerNotInitialized
 	}
 
+	if globalIsGateway {
+		return newBucketMetadata(bucket), false, NotImplemented{}
+	}
+
 	if isMinioMetaBucketName(bucket) {
 		return newBucketMetadata(bucket), reloaded, errInvalidArgument
 	}
