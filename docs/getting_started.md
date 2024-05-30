@@ -6,6 +6,8 @@
 [Running as a Systemd Service](#running-as-a-systemd-service)  
 [Running in Containers](#running-in-containers)  
 [Running Using AWS Instance Profile Credentials](#running-using-aws-instance-profile-credentials)  
+[Running on EKS with IAM roles for service accounts](#running-on-eks-with-iam-roles-for-service-accounts)  
+[Running on EKS with EKS Pod Identities](#running-on-eks-with-eks-pod-identities)  
 [Troubleshooting](#troubleshooting)  
 
 ## Configuration
@@ -14,7 +16,7 @@ The following environment variables are used to configure the gateway when
 running as a Container or as a Systemd service.
 
 | Name                                  | Required? | Allowed Values               | Default   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------- | --------- | ---------------------------- | --------- |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------------------- | --------- | ---------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `ALLOW_DIRECTORY_LIST`                | Yes       | `true`, `false`              | `false`   | Flag enabling directory listing                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `AWS_SIGS_VERSION`                    | Yes       | 2, 4                         |           | AWS Signatures API version                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `AWS_ACCESS_KEY_ID`                   | Yes       |                              |           | Access key                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -25,23 +27,29 @@ running as a Container or as a Systemd service.
 | `S3_SERVER_PORT`                      | Yes       |                              |           | SSL/TLS port to connect to                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `S3_SERVER_PROTO`                     | Yes       | `http`, `https`              |           | Protocol to used connect to S3 server                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `S3_SERVER`                           | Yes       |                              |           | S3 host to connect to                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `S3_STYLE`                            | Yes       | `virtual`, `path`, `default` | `default` | The S3 host/path method. <li>`virtual` is the method that that uses DNS-style bucket+hostname:port. This is the `default` value. <li>`path` is a method that appends the bucket name as the first directory in the URI's path. This method is used by many S3 compatible services. <br/><br/>See this [AWS blog article](https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/) for further information.                   |
+| `S3_STYLE`                            | Yes       | `virtual-v2`, `virtual`, `path`, `default` | `default` | The S3 host/path method. <br><br>`virtual` and `virtual-v2` represent the method that uses DNS-style bucket+hostname:port. The `default` is the same as `virtual`. In the future, the `default` value will become `virtual-v2`. See [Choosing a `S3_STYLE` Setting](#user-content-choosing-a-s3_style-setting) below for details. <br><br>`path` is a method that appends the bucket name as the first directory in the URI's path. This method is used by many S3 compatible services. See this [AWS blog article](https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/) for further information. |
+| `S3_SERVICE`                          | Yes       | `s3`, `s3express`            | `s3`      | Configures the gateway to interface with either normal S3 buckets or S3 Express One Zone                                                                                                                                                                                                                                                                                                                                                                     |
 | `DEBUG`                               | No        | `true`, `false`              | `false`   | Flag enabling AWS signatures debug output                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `APPEND_SLASH_FOR_POSSIBLE_DIRECTORY` | No        | `true`, `false`              | `false`   | Flag enabling the return a 302 with a `/` appended to the path. This is independent of the behavior selected in `ALLOW_DIRECTORY_LIST` or `PROVIDE_INDEX_PAGE`.                                                                                                                                                                                                                                                                                              |
 | `DIRECTORY_LISTING_PATH_PREFIX`       | No        |                              |           | In `ALLOW_DIRECTORY_LIST=true` mode [adds defined prefix to links](#configuring-directory-listing)                                                                                                                                                                                                                                                                                                                                                           |
 | `DNS_RESOLVERS`                       | No        |                              |           | DNS resolvers (separated by single spaces) to configure NGINX with                                                                                                                                                                                                                                                                                                                                                                                           |
 | `PROXY_CACHE_MAX_SIZE`                | No        |                              | `10g`     | Limits cache size                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `PROXY_CACHE_INACTIVE`                | No        |                              | `60m`     | Cached data that are not accessed during the time specified by the parameter get removed from the cache regardless of their freshness                                                                                                                                                                                                                                                                                                                        |
+| `PROXY_CACHE_SLICE_SIZE`              | No        |                              | `1m`      | For requests with a `Range` header included, determines the size of the chunks in which the file is fetched. Values much smaller than the requests can lead to inefficiencies due to reading and writing many files. See [below for more details](#byte-range-requests-and-caching)                                                                                                                                                                          |
 | `PROXY_CACHE_VALID_OK`                | No        |                              | `1h`      | Sets caching time for response code 200 and 302                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `PROXY_CACHE_VALID_NOTFOUND`          | No        |                              | `1m`      | Sets caching time for response code 404                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `PROXY_CACHE_VALID_FORBIDDEN`         | No        |                              | `30s`     | Sets caching time for response code 403                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `PROVIDE_INDEX_PAGE`                  | No        | `true`, `false`              | `false`   | Flag which returns the index page if there is one when requesting a directory.                                                                                                                                                                                                                                                                                                                                                                               |
 | `JS_TRUSTED_CERT_PATH`                | No        |                              |           | Enables the `js_fetch_trusted_certificate` directive when retrieving AWS credentials and sets the path (on the container) to the specified path                                                                                                                                                                                                                                                                                                              |
-| `HEADER_PREFIXES_TO_STRIP`            | No        |                              |           | A list of HTTP header prefixes that exclude headers client responses. List should be specified in lower-case and a semicolon (;) should be used to as a deliminator between values. For example: `x-goog-;x-something-`                                                                                                                                                                                                                                      |
+| `HEADER_PREFIXES_TO_STRIP`            | No        |                              |           | A list of HTTP header prefixes that exclude headers from client responses. List should be specified in lower-case and a semicolon (;) should be used to as a delimiter between values. For example: x-goog-;x-something-. Headers starting with x-amz- will be stripped by default for security reasons unless explicitly added in HEADER_PREFIXES_ALLOWED.                                                                                              |
+| `HEADER_PREFIXES_ALLOWED`             | No        |                              |           | A list of allowed prefixes for HTTP headers that are returned to the client in responses. List should be specified in lower-case and a semicolon (;) should be used to as a delimiter between values. For example: x-amz-;x-something-. It is NOT recommended to return x-amz- headers for security reasons. Think carefully about what is allowed here.                                                                                           |
 | `CORS_ENABLED`                        | No        | `true`, `false`              | `false`   | Flag that enables CORS headers on GET requests and enables pre-flight OPTIONS requests. If enabled, this will add CORS headers for "fully open" cross domain requests by default, meaning all domains are allowed, similar to the settings show in [this example](https://enable-cors.org/server_nginx.html). CORS settings can be fine-tuned by overwriting the [`cors.conf.template`](/common/etc/nginx/templates/gateway/cors.conf.template) file.        |
-| `CORS_ALLOWED_ORIGIN`                 | No        |                              |           | value to set to be returned from the CORS `Access-Control-Allow-Origin` header. This value is only used if CORS is enabled. (default: \*)                                                                                                                                                                                                                                                                                                                    |
-| `STRIP_LEADING_DIRECTORY_PATH`        | No        |                              |           | Removes a portion of the path in the requested URL (if configured). Useful when deploying to an ALB under a folder (eg. www.mysite.com/somepath).                                                                                                                                                                                                                                                                                                            |
-| `PREFIX_LEADING_DIRECTORY_PATH`       | No        |                              |           | Prefix to prepend to all S3 object paths. Useful to serve only a subset of an S3 bucket. When used in combination with `STRIP_LEADING_DIRECTORY_PATH`, this allows the leading path to be replaced, rather than just removed.                                                                                                                                                                                                                                |
+| `CORS_ALLOWED_ORIGIN`                 | No        |                              |           | Value to set to be returned from the CORS `Access-Control-Allow-Origin` header. This value is only used if CORS is enabled. (default: \*)                                                                                                                                                                                                                                                                                                                    |
+| `STRIP_LEADING_DIRECTORY_PATH`                 | No        |                              |           | Removes a portion of the path in the requested URL (if configured). Useful when deploying to an ALB under a folder (eg. www.mysite.com/somepath).                                                                                                                                                                                                                                                                                                                    |
+| `PREFIX_LEADING_DIRECTORY_PATH`                 | No        |                              |           | Prefix to prepend to all S3 object paths. Useful to serve only a subset of an S3 bucket. When used in combination with `STRIP_LEADING_DIRECTORY_PATH`, this allows the leading path to be replaced, rather than just removed.                                                                                                                                                                                                                                                                                                                    |
+
+
+
 
 If you are using [AWS instance profile credentials](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2.html),
 you will need to omit the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` variables from
@@ -61,6 +69,29 @@ There are few optional environment variables that can be used.
   selected. When the regional model is selected then the STS endpoint generated will
   be coded to the current AWS region. This environment variable will be ignored if
   `STS_ENDPOINT` is set. Valid options are: `global` (default) or `regional`.
+
+### Choosing a `S3_STYLE` Setting
+**If you are using AWS S3 or S3 Express One Zone, use `virtual-v2`.** We are maintaining `virtual` temporarily until we hear from the community that `virtual-v2` does not cause issues - or we introduce a versioning system that allows us to safely flag breaking changes.
+Until then, `virtual` works as before, and `default` still causes the `virtual` behavior to be used.
+
+**`virtual-v2` is not expected to be a breaking change** but we are being cautious.
+
+A full reference for S3 addressing styles may be found [here](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html)
+
+Here is the difference between `virtual` and `virtual-v2`:
+#### virtual
+* Proxied endpoint: `S3_SERVER:S3_SERVER_PORT`
+* `Host` header: `S3_BUCKET_NAME}.S3_SERVER`
+* `host` field in the [S3 V4 `CanonicalHeaders`](https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html): `S3_BUCKET_NAME}.S3_SERVER`
+
+#### virtual-v2
+All items are set to the same value:
+* Proxied endpoint: `S3_BUCKET_NAME.S3_SERVER:S3_SERVER_PORT`
+* `Host` header: `S3_BUCKET_NAME.S3_SERVER:S3_SERVER_PORT`
+* `host` field in the [S3 V4 `CanonicalHeaders`](https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html): `S3_BUCKET_NAME.S3_SERVER:S3_SERVER_PORT`
+
+#### path
+`path` style routing does not prepend the bucket name to the host, and includes it as the first segment in the request path.  AWS is actively trying to move away from this method. Some S3 compatible object stores may require that you use this setting - but try to avoid it if your object store works with `virtual-v2`.
 
 
 ### Configuring Directory Listing
@@ -111,6 +142,48 @@ The `STRIP_LEADING_DIRECTORY_PATH` environment variable allows one to host an
 S3 bucket in a subfolder on an ALB.  For example, if you wanted to expose the
 root of a bucket under the path "www.mysite.com/somepath", you would set this
 variable to "/somepath".
+
+## Byte-Range Requests and Caching
+The gateway caches [byte-range](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests) (requests sent with a `Range` header) requests differently than normal requests.
+
+The gateway is configured to cache such requests in chunks of size `PROXY_CACHE_SLICE_SIZE`. If you don't provide this configuration value it will default to 1 megabyte.
+
+This means that if you request 2.5 megabytes of a 1 gigabyte file, the gateway will cache 3 megabytes and nothing else.
+
+Setting your slice size too small can have performance impacts since NGINX performs a subrequest for each slice. For more details see the [official reference](http://nginx.org/en/docs/http/ngx_http_slice_module.html).
+
+You may make byte-range requests and normal requests for the same file and NGINX will automatically handle them differently.  The caches for file chunks and normal file requests are separate on disk.
+
+## Usage with AWS S3 Express One Zone
+The gateway may be used to proxy files in the AWS S3 Express One Zone product (also called Directory Buckets).
+
+To do so, be sure that `S3_STYLE` is set to `virtual-v2`. Additionally, the `S3_SERVER` configuration must be set a combination of the bucket name and the [Zonal Endpoint](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-networking.html#s3-express-endpoints).
+
+### Directory Bucket Names
+See the [official documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html) for the most up to date rules on Directory Bucket naming.
+
+Directory Buckets must have names matching this format:
+```
+bucket-base-name--azid--x-s3
+```
+For example:
+```
+bucket-base-name--usw2-az1--x-s3
+```
+### Final Configuration
+The bucket name must be prepended to the zonal endpoint like this
+```
+bucket-base-name--usw2-az1--x-s3.s3express-usw2-az1.us-west-2.amazonaws.com
+```
+The above is the value that must be provided to the `S3_SERVER` variable.
+Additionally, the `S3_BUCKET_NAME` must be set to the full bucket name with the suffix:
+```
+bucket-base-name--usw2-az1--x-s3
+```
+Buckets created in the AWS UI don't require manual specification of a suffix but it must be included in the gateway configuration.
+
+### Trying it Out
+A sample Terraform script to provision a bucket is provided in `/deployments/s3_express`.
 
 ## Running as a Systemd Service
 
@@ -398,6 +471,23 @@ spec:
             httpGet:
               path: /health
               port: http
+```
+## Running on EKS with EKS Pod Identities
+
+An alternative way to use the container image on an EKS cluster is to use a service account which can assume a role using [Pod Identities](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html).
+- Installing the [Amazon EKS Pod Identity Agent](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-agent-setup.html) on the cluster
+- Configuring a [Kubernetes service account to assume an IAM role with EKS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-association.html)
+- [Configure your pods, Deployments, etc to use the Service Account](https://docs.aws.amazon.com/eks/latest/userguide/pod-configuration.html)
+- As soon as the pods/deployments are updated, you will see the couple of Env Variables listed below in the pods.
+  - `AWS_CONTAINER_CREDENTIALS_FULL_URI` - Contains the Uri of the EKS Pod Identity Agent that will provide the credentials 
+  - `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE`  - Contains the token which will be used to create temporary credentials using the EKS Pod Identity Agent.
+
+The minimal set of resources to deploy is the same than for [Running on EKS with IAM roles for service accounts](#running-on-eks-with-iam-roles-for-service-accounts), except there is no need to annotate the service account:
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-s3-gateway
 ```
 
 ## Troubleshooting
