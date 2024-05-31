@@ -76,6 +76,14 @@ const S3_STYLE = process.env['S3_STYLE'];
  * @type {Array<String>}
  * */
 const ADDITIONAL_HEADER_PREFIXES_TO_STRIP = utils.parseArray(process.env['HEADER_PREFIXES_TO_STRIP']);
+
+/**
+ * Additional header prefixes to allow from the response before sending to the
+ * client. This is opposite to HEADER_PREFIXES_TO_STRIP.
+ * @type {Array<String>}
+ * */
+const ADDITIONAL_HEADER_PREFIXES_ALLOWED = utils.parseArray(process.env['HEADER_PREFIXES_ALLOWED']);
+
 /**
  * Default filename for index pages to be read off of the backing object store.
  * @type {string}
@@ -86,7 +94,7 @@ const INDEX_PAGE = "index.html";
  * Constant defining the service requests are being signed for.
  * @type {string}
  */
-const SERVICE = 's3';
+const SERVICE = process.env['S3_SERVICE'] || "s3";
 
 /**
  * Transform the headers returned from S3 such that there isn't information
@@ -99,15 +107,19 @@ function editHeaders(r) {
         r.method === 'HEAD' &&
         _isDirectory(decodeURIComponent(r.variables.uri_path));
 
-    /* Strips all x-amz- headers from the output HTTP headers so that the
+    /* Strips all x-amz- (if x-amz- is not in ADDITIONAL_HEADER_PREFIXES_ALLOWED) headers from the output HTTP headers so that the
      * requesters to the gateway will not know you are proxying S3. */
     if ('headersOut' in r) {
         for (const key in r.headersOut) {
+            const headerName = key.toLowerCase()
             /* We delete all headers when it is a directory head request because
              * none of the information is relevant for passing on via a gateway. */
             if (isDirectoryHeadRequest) {
                 delete r.headersOut[key];
-            } else if (_isHeaderToBeStripped(key.toLowerCase(), ADDITIONAL_HEADER_PREFIXES_TO_STRIP)) {
+            } else if (
+                !_isHeaderToBeAllowed(headerName, ADDITIONAL_HEADER_PREFIXES_ALLOWED)
+                && _isHeaderToBeStripped(headerName, ADDITIONAL_HEADER_PREFIXES_TO_STRIP)
+            ) {
                 delete r.headersOut[key];
             }
         }
@@ -145,6 +157,24 @@ function _isHeaderToBeStripped(headerName, additionalHeadersToStrip) {
 }
 
 /**
+ * Determines if a given HTTP header should be force allowed from requesting client.
+ * @param headerName {string} Lowercase HTTP header name
+ * @param additionalHeadersToAllow {Array<string>} array of additional headers to allow
+ * @returns {boolean} true if header should be removed
+ */
+function _isHeaderToBeAllowed(headerName, additionalHeadersToAllow) {
+
+    for (let i = 0; i < additionalHeadersToAllow.length; i++) {
+        const headerToAllow = additionalHeadersToAllow[i];
+        if (headerName.indexOf(headerToAllow, 0) >= 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Outputs the timestamp used to sign the request, so that it can be added to
  * the 'Date' header and sent by NGINX.
  *
@@ -165,12 +195,7 @@ function s3date(r) {
 function s3auth(r) {
     const bucket = process.env['S3_BUCKET_NAME'];
     const region = process.env['S3_REGION'];
-    let server;
-    if (S3_STYLE === 'path') {
-        server = process.env['S3_SERVER'] + ':' + process.env['S3_SERVER_PORT'];
-    } else {
-        server = process.env['S3_SERVER'];
-    }
+    const host = r.variables.s3_host;
     const sigver = process.env['AWS_SIGS_VERSION'];
 
     let signature;
@@ -180,7 +205,7 @@ function s3auth(r) {
         let req = _s3ReqParamsForSigV2(r, bucket);
         signature = awssig2.signatureV2(r, req.uri, req.httpDate, credentials);
     } else {
-        let req = _s3ReqParamsForSigV4(r, bucket, server);
+        let req = _s3ReqParamsForSigV4(r, bucket, host);
         signature = awssig4.signatureV4(r, awscred.Now(), region, SERVICE,
             req.uri, req.queryParams, req.host, credentials);
     }
@@ -221,15 +246,11 @@ function _s3ReqParamsForSigV2(r, bucket) {
  * @see {@link https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html | AWS V4 Signing Process}
  * @param r {NginxHTTPRequest} HTTP request object
  * @param bucket {string} S3 bucket associated with request
- * @param server {string} S3 host associated with request
+ * @param host {string} S3 host associated with request
  * @returns {S3ReqParams} s3ReqParams object (host, uri, queryParams)
  * @private
  */
-function _s3ReqParamsForSigV4(r, bucket, server) {
-    let host = server;
-    if (S3_STYLE === 'virtual' || S3_STYLE === 'default' || S3_STYLE === undefined) {
-        host = bucket + '.' + host;
-    }
+function _s3ReqParamsForSigV4(r, bucket, host) {
     const baseUri = s3BaseUri(r);
     const computed_url = !utils.parseBoolean(r.variables.forIndexPage)
         ? r.variables.uri_path
@@ -362,7 +383,12 @@ function redirectToS3(r) {
     } else if (!ALLOW_LISTING && !PROVIDE_INDEX_PAGE && uriPath === "/") {
        r.internalRedirect("@error404");
     } else {
-        r.internalRedirect("@s3");
+        if (r.headersIn["Range"]) {
+            r.internalRedirect("@s3_sliced");
+        } else {
+           r.internalRedirect("@s3"); 
+        }
+        
     }
 }
 
